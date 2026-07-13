@@ -2,23 +2,39 @@
 
 Turns raw camera photos into Instagram-ready 1080×1350 images: the photo is placed, uncropped, on a white passe-partout canvas, with a centered caption underneath showing the shooting parameters read from EXIF (focal length, aperture, shutter speed, ISO).
 
-Next to every export it drops a `.txt` sidecar with a ready-to-paste post — a description and hashtags written by a **local** vision LLM (Ollama in Docker, nothing leaves your machine):
-
-```
-Одинокий прохожий растворяется в вечернем городском свете.
-
-28mm   ·   f/5.6   ·   1/250s   ·   ISO 400
-
-#streetphotography #streetphoto #urbanphotography
-#citylife #everydaylife #streetphotographer
-#nightphotography #moodygrams
-```
+Next to every export it drops a `.txt` sidecar with a ready-to-paste post — a description and hashtags written by a **local** vision LLM (Ollama in Docker, nothing leaves your machine).
 
 | Source | Result |
 | --- | --- |
 | <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
 
-A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath. Both files are in [`examples/`](examples).
+A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath.
+
+This is the sidecar the model actually wrote for the photo above, with `description_language` left at its default:
+
+```
+Мирный уголок природы под тяжелым небом.
+
+77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
+
+#landscapephotography #naturephotography #landscapelovers
+#landscape #serenity #reflection
+#summer #peaceful #nature
+```
+
+Set `"description_language": "English"` in `config.json` and the same photo comes back as:
+
+```
+Serene pond reflecting tranquil gazebo amidst lush greenery under cloudy sky
+
+77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
+
+#landscapephotography #naturephotography #landscapelovers
+#landscape #peaceful #summer
+#reflection #architecture #nature
+```
+
+The first line of hashtags comes from `config.json`, the rest from the model. All three files are in [`examples/`](examples).
 
 ## Usage
 
@@ -33,7 +49,7 @@ input/       photos waiting to be processed — this is where you drop them
 processed/   <name>_passepartout.jpg + <name>_passepartout.txt
 originals/   the source photo, moved here once it has been exported
 src/         the scripts
-tags.json    mandatory hashtags
+config.json  prompt, description language, mandatory hashtags
 ```
 
 `input/` ends up empty after a run: every photo either lands in `processed/` and moves to `originals/`, or stays put with the reason logged to `process-errors.log`.
@@ -81,26 +97,42 @@ src\run-all.bat
 
 `OLLAMA_URL` (default `http://localhost:11434`) points the script at a different host. No GPU? Delete the `deploy:` block from `docker-compose.yml` and Ollama falls back to CPU — slower, but it works.
 
-The model is asked for a Russian one-line description, a handful of English hashtags and the genre of the shot. The prompt, the hashtag counts and the line width live in the *Caption sidecar* block at the top of `src/passepartout_processor.py`; the answer is constrained by a JSON schema, so a chatty model cannot break the format. If the LLM is unreachable the photo is still exported — the sidecar just holds the metadata line, and the reason is printed and logged.
+The model is asked for a one-line description, a handful of English hashtags and the genre of the shot — see [config.json](#configjson). The answer is constrained by a JSON schema, so a chatty model cannot break the format. If the LLM is unreachable the photo is still exported — the sidecar just holds the metadata line, and the reason is printed and logged.
 
-## Mandatory hashtags
+## config.json
 
-Leaving the tags entirely to the model gives you a different set every time, so the tags you always want are pinned in `tags.json`:
+Everything the LLM step reads sits in `config.json` in the project root — no need to touch the code:
 
 ```json
 {
-  "always": [],
-  "genres": {
-    "street": ["streetphotography", "streetphoto", "urbanphotography", "citylife", "everydaylife", "streetphotographer"],
-    "landscape": ["landscapephotography", "naturephotography", "landscapelovers"],
-    "other": []
+  "description_language": "Russian",
+
+  "prompt": [
+    "You are writing an Instagram caption for a photographer's shot.",
+    "Look at the photo and answer with JSON only.",
+    "- description: one short evocative sentence in {language} ... Maximum 90 characters.",
+    "- hashtags: {min} to {max} English hashtags, lowercase, no '#' sign ...",
+    "- genre: the single best match for this photo from this list: {genres} ..."
+  ],
+
+  "hashtags": {
+    "always": [],
+    "genres": {
+      "street": ["streetphotography", "streetphoto", "urbanphotography", "citylife", "everydaylife", "streetphotographer"],
+      "landscape": ["landscapephotography", "naturephotography", "landscapelovers"],
+      "other": []
+    }
   }
 }
 ```
 
-`always` goes on every photo. The model picks one genre from the keys of `genres` — the enum is generated from the file, so adding a genre is enough to make it selectable — and that set is added too. Mandatory tags come first in the sidecar and are never dropped; the model's own tags fill the rest, up to `HASHTAGS_TOTAL_MAX` (15). The model is told to skip obvious genre words and describe mood, light, subject and season instead, so its tags complement the pinned ones instead of repeating them.
+**`description_language`** — the language of the sentence above the hashtags, named in English: `Russian`, `English`, `German`. The hashtags stay English either way.
 
-Write tags without the `#`. Deleting `tags.json` is fine — you then get only what the model came up with.
+**`prompt`** — a list of lines, joined with newlines. `{language}`, `{min}`, `{max}` and `{genres}` are filled in for you; `{genres}` becomes the list of keys below. Rewrite it however you like — the answer is pinned to a JSON schema, so a chatty model still cannot break the format.
+
+**`hashtags`** — the tags you always want, so you are not at the mercy of the model's mood. `always` goes on every photo; the model picks one key of `genres` for the shot and that set is added too. Adding a genre to the file is enough to make it selectable — the schema's enum is generated from the keys. Mandatory tags come first in the sidecar and are never dropped; the model's own tags fill the rest, up to `HASHTAGS_TOTAL_MAX` (15). Write them without the `#`.
+
+A missing or broken `config.json` is not fatal: the built-in prompt is used, the description comes out in English and you get only the model's own tags.
 
 ## Requirements
 
@@ -120,17 +152,19 @@ All settings live in the block at the top of `src/passepartout_processor.py`: ca
 
 Утилита готовит фотографии к публикации в Instagram: снимок без обрезки кладётся на белое паспарту 1080×1350, а под ним по центру подписываются параметры съёмки, вытащенные из EXIF — фокусное расстояние, диафрагма, выдержка, ISO.
 
-Рядом с каждой готовой картинкой кладётся `.txt` с готовым постом — описание и хештеги пишет **локальная** vision-модель (Ollama в докере, ничего не уходит наружу):
+Рядом с каждой готовой картинкой кладётся `.txt` с готовым постом — описание и хештеги пишет **локальная** vision-модель (Ollama в докере, ничего не уходит наружу). Вот что она написала для фотографии из примера выше:
 
 ```
-Одинокий прохожий растворяется в вечернем городском свете.
+Мирный уголок природы под тяжелым небом.
 
-28mm   ·   f/5.6   ·   1/250s   ·   ISO 400
+77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 
-#streetphotography #streetphoto #urbanphotography
-#citylife #everydaylife #streetphotographer
-#nightphotography #moodygrams
+#landscapephotography #naturephotography #landscapelovers
+#landscape #serenity #reflection
+#summer #peaceful #nature
 ```
+
+Первая строка хештегов пришла из `config.json`, остальные придумала модель. Язык описания задаётся там же — поставьте `"description_language": "English"`, и тот же кадр вернётся с английским текстом.
 
 ## Как запустить
 
@@ -145,7 +179,7 @@ input/       фотографии, ждущие обработки — сюда 
 processed/   <имя>_passepartout.jpg + <имя>_passepartout.txt
 originals/   исходник, уехавший сюда после успешного экспорта
 src/         скрипты
-tags.json    обязательные хештеги
+config.json  промпт, язык описания, обязательные хештеги
 ```
 
 После прогона `input/` остаётся пустой: каждое фото либо оказывается в `processed/` и уезжает в `originals/`, либо остаётся на месте, а причина пишется в `process-errors.log`.
@@ -193,26 +227,42 @@ src\run-all.bat
 
 Переменная `OLLAMA_URL` (по умолчанию `http://localhost:11434`) нужна, если Ollama крутится на другом хосте. Нет видеокарты — уберите блок `deploy:` из `docker-compose.yml`, и модель поедет на процессоре: медленнее, но работает.
 
-У модели просят одно предложение по-русски, несколько английских хештегов и жанр кадра. Промпт, количество тегов и ширина строки лежат в блоке *Caption sidecar* в начале `src/passepartout_processor.py`. Ответ ограничен JSON-схемой, так что болтливая модель формат не сломает. Если Ollama недоступна, фотография всё равно обработается — в `.txt` останется только строка с метаданными, а причина будет напечатана и записана в лог.
+У модели просят одно предложение, несколько английских хештегов и жанр кадра — всё это настраивается в [config.json](#configjson-1). Ответ ограничен JSON-схемой, так что болтливая модель формат не сломает. Если Ollama недоступна, фотография всё равно обработается — в `.txt` останется только строка с метаданными, а причина будет напечатана и записана в лог.
 
-## Обязательные хештеги
+## config.json
 
-Если отдать теги целиком на откуп модели, каждый раз получится новый набор. Поэтому теги, которые нужны всегда, прибиты в `tags.json`:
+Всё, что нужно шагу с моделью, лежит в `config.json` в корне проекта — код трогать не надо:
 
 ```json
 {
-  "always": [],
-  "genres": {
-    "street": ["streetphotography", "streetphoto", "urbanphotography", "citylife", "everydaylife", "streetphotographer"],
-    "landscape": ["landscapephotography", "naturephotography", "landscapelovers"],
-    "other": []
+  "description_language": "Russian",
+
+  "prompt": [
+    "You are writing an Instagram caption for a photographer's shot.",
+    "Look at the photo and answer with JSON only.",
+    "- description: one short evocative sentence in {language} ... Maximum 90 characters.",
+    "- hashtags: {min} to {max} English hashtags, lowercase, no '#' sign ...",
+    "- genre: the single best match for this photo from this list: {genres} ..."
+  ],
+
+  "hashtags": {
+    "always": [],
+    "genres": {
+      "street": ["streetphotography", "streetphoto", "urbanphotography", "citylife", "everydaylife", "streetphotographer"],
+      "landscape": ["landscapephotography", "naturephotography", "landscapelovers"],
+      "other": []
+    }
   }
 }
 ```
 
-`always` уходит на каждое фото. Жанр модель выбирает сама из ключей `genres` — список для неё генерируется прямо из файла, так что достаточно дописать жанр, и он станет доступен, — и соответствующий набор тоже добавляется. Обязательные теги идут в `.txt` первыми и никогда не выбрасываются; теги от модели дополняют список до `HASHTAGS_TOTAL_MAX` (15). Модели отдельно сказано не повторять очевидные жанровые слова, а описывать настроение, свет, сюжет и время года — чтобы её теги дополняли прибитые, а не дублировали их.
+**`description_language`** — язык предложения над хештегами, название пишется по-английски: `Russian`, `English`, `German`. Хештеги в любом случае остаются английскими.
 
-Решётку в файле писать не нужно. `tags.json` можно и удалить — тогда останутся только теги от модели.
+**`prompt`** — список строк, они склеиваются через перевод строки. `{language}`, `{min}`, `{max}` и `{genres}` подставляются сами; вместо `{genres}` уедет список ключей из блока ниже. Промпт можно переписать как угодно — ответ всё равно прибит JSON-схемой, так что формат болтливая модель не сломает.
+
+**`hashtags`** — теги, которые нужны всегда, чтобы не зависеть от настроения модели. `always` уходит на каждое фото; жанр модель выбирает сама из ключей `genres`, и соответствующий набор тоже добавляется. Достаточно дописать жанр в файл, и он станет доступен — enum для схемы генерируется прямо из ключей. Обязательные теги идут в `.txt` первыми и никогда не выбрасываются, теги от модели дополняют список до `HASHTAGS_TOTAL_MAX` (15). Решётку писать не нужно.
+
+Если `config.json` потерялся или сломан — не страшно: возьмётся встроенный промпт, описание получится английским, а теги будут только от модели.
 
 ## Что нужно установить
 

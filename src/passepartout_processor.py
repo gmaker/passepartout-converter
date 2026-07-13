@@ -121,10 +121,26 @@ LLM_TEMPERATURE = 0.6
 LLM_PREVIEW_MAX_SIDE = 1024
 LLM_PREVIEW_QUALITY = 85
 
-# Mandatory hashtags per genre: see tags.json next to this script.
-# The model picks a genre from its "genres" keys; that set plus "always"
-# is merged with the tags the model came up with itself.
-TAGS_FILE_NAME = "tags.json"
+# The prompt, the language of the description and the mandatory hashtags all live
+# in config.json in the project root. The model picks a genre from its "genres"
+# keys; that set plus "always" is merged with the tags the model came up with.
+CONFIG_FILE_NAME = "config.json"
+
+# Used when config.json is missing or a key is not set.
+DEFAULT_LANGUAGE = "English"
+
+DEFAULT_PROMPT = [
+    "You are writing an Instagram caption for a photographer's shot.",
+    "Look at the photo and answer with JSON only.",
+    "- description: one short evocative sentence in {language} about what is happening "
+    "in the frame and its mood. No hashtags, no quotes, no camera talk. "
+    "Maximum 90 characters.",
+    "- hashtags: {min} to {max} English hashtags, lowercase, no '#' sign, no spaces "
+    "inside a tag. Skip the obvious genre words - describe the mood, the light, "
+    "the subject and the season instead.",
+    "- genre: the single best match for this photo from this list: {genres}. "
+    "Use 'other' only when nothing fits.",
+]
 
 # How many tags to ask the model for, on top of the mandatory ones.
 HASHTAGS_MIN = 5
@@ -147,7 +163,7 @@ ERROR_LOG_NAME = "process-errors.log"
 
 
 def project_root() -> Path:
-    """The folder above src/ — it holds input/, processed/, originals/ and tags.json."""
+    """The folder above src/ — it holds input/, processed/, originals/ and config.json."""
     return Path(__file__).resolve().parent.parent
 
 
@@ -581,49 +597,74 @@ def normalize_tags(raw_tags: Any) -> list[str]:
     return tags
 
 
-def load_tag_sets() -> tuple[list[str], dict[str, list[str]]]:
-    """Reads tags.json. A missing or broken file simply means no mandatory tags."""
-    path = project_root() / TAGS_FILE_NAME
+class Config:
+    """config.json, already validated. A missing or broken file falls back to the defaults."""
+
+    def __init__(self, data: dict[str, Any] | None = None) -> None:
+        data = data or {}
+
+        language = data.get("description_language")
+        self.language: str = language.strip() if isinstance(language, str) and language.strip() else DEFAULT_LANGUAGE
+
+        prompt = data.get("prompt")
+        if isinstance(prompt, list) and prompt:
+            self.prompt_lines: list[str] = [str(line) for line in prompt]
+        elif isinstance(prompt, str) and prompt.strip():
+            self.prompt_lines = prompt.splitlines()
+        else:
+            self.prompt_lines = list(DEFAULT_PROMPT)
+
+        hashtags = data.get("hashtags")
+        hashtags = hashtags if isinstance(hashtags, dict) else {}
+
+        self.always: list[str] = normalize_tags(hashtags.get("always"))
+
+        self.genres: dict[str, list[str]] = {}
+        raw_genres = hashtags.get("genres")
+
+        if isinstance(raw_genres, dict):
+            for name, tags in raw_genres.items():
+                self.genres[str(name).strip().lower()] = normalize_tags(tags)
+
+
+def load_config() -> Config:
+    path = project_root() / CONFIG_FILE_NAME
 
     if not path.exists():
-        return [], {}
+        print(f"WARNING: {CONFIG_FILE_NAME} not found - using the built-in prompt and no mandatory tags.")
+        return Config()
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        print(f"  WARNING: {TAGS_FILE_NAME} could not be read - {exc}")
-        return [], {}
+        print(f"WARNING: {CONFIG_FILE_NAME} could not be read ({exc}) - using the built-in prompt.")
+        return Config()
 
-    always = normalize_tags(data.get("always"))
-
-    raw_genres = data.get("genres")
-    genres: dict[str, list[str]] = {}
-
-    if isinstance(raw_genres, dict):
-        for name, tags in raw_genres.items():
-            genres[str(name).strip().lower()] = normalize_tags(tags)
-
-    return always, genres
+    return Config(data)
 
 
-def build_prompt(genres: dict[str, list[str]]) -> str:
-    lines = [
-        "You are writing an Instagram caption for a photographer's shot.",
-        "Look at the photo and answer with JSON only.",
-        "- description: one short evocative sentence in Russian about what is happening "
-        "in the frame and its mood. No hashtags, no quotes, no camera talk. "
-        "Maximum 90 characters.",
-        f"- hashtags: {HASHTAGS_MIN} to {HASHTAGS_MAX} English hashtags, lowercase, no '#' sign, "
-        "no spaces inside a tag. Skip the obvious genre words - describe the mood, the light, "
-        "the subject and the season instead.",
-    ]
+def build_prompt(config: Config) -> str:
+    genre_list = ", ".join(sorted(config.genres))
 
-    if genres:
-        lines.append(
-            "- genre: the single best match for this photo from this list: "
-            + ", ".join(sorted(genres))
-            + ". Use 'other' only when nothing fits."
-        )
+    lines = []
+
+    for line in config.prompt_lines:
+        # A line that asks for a genre is pointless when config.json defines none.
+        if "{genres}" in line and not config.genres:
+            continue
+
+        try:
+            lines.append(
+                line.format(
+                    language=config.language,
+                    min=HASHTAGS_MIN,
+                    max=HASHTAGS_MAX,
+                    genres=genre_list,
+                )
+            )
+        except (KeyError, IndexError):
+            # An unknown {placeholder} in the prompt is passed through as written.
+            lines.append(line)
 
     return "\n".join(lines)
 
@@ -645,16 +686,16 @@ def build_schema(genres: dict[str, list[str]]) -> dict[str, Any]:
     return schema
 
 
-def ask_llm(preview: bytes, genres: dict[str, list[str]]) -> dict[str, Any]:
+def ask_llm(preview: bytes, config: Config) -> dict[str, Any]:
     payload = {
         "model": OLLAMA_MODEL,
         "stream": False,
-        "format": build_schema(genres),
+        "format": build_schema(config.genres),
         "options": {"temperature": LLM_TEMPERATURE},
         "messages": [
             {
                 "role": "user",
-                "content": build_prompt(genres),
+                "content": build_prompt(config),
                 "images": [base64.b64encode(preview).decode("ascii")],
             }
         ],
@@ -686,14 +727,9 @@ def ask_llm(preview: bytes, genres: dict[str, list[str]]) -> dict[str, Any]:
     return json.loads(content)
 
 
-def merge_hashtags(
-    llm_tags: list[str],
-    genre: str,
-    always: list[str],
-    genres: dict[str, list[str]],
-) -> list[str]:
+def merge_hashtags(llm_tags: list[str], genre: str, config: Config) -> list[str]:
     """Mandatory tags come first and are never dropped; the model's own tags fill the rest."""
-    mandatory = genres.get(genre, []) + always
+    mandatory = config.genres.get(genre, []) + config.always
 
     merged = normalize_tags(mandatory)
     room_left = max(0, HASHTAGS_TOTAL_MAX - len(merged))
@@ -720,7 +756,8 @@ def build_sidecar_text(description: str, tags: list[str], caption: str) -> str:
     blocks = []
 
     if description:
-        blocks.append(description)
+        # Models answer in lower case often enough to be worth fixing here.
+        blocks.append(description[0].upper() + description[1:])
 
     if caption.strip():
         blocks.append(caption.strip())
@@ -735,8 +772,7 @@ def write_sidecar(
     source: Path,
     destination: Path,
     caption: str,
-    always: list[str],
-    genres: dict[str, list[str]],
+    config: Config,
 ) -> tuple[Path, str, str]:
     """
     Writes <name>_passepartout.txt and returns its path, the detected genre and a
@@ -752,7 +788,7 @@ def write_sidecar(
 
     if SIDECAR_ENABLED:
         try:
-            answer = ask_llm(llm_preview(source), genres)
+            answer = ask_llm(llm_preview(source), config)
 
             raw_description = answer.get("description", "")
             if isinstance(raw_description, str):
@@ -766,7 +802,7 @@ def write_sidecar(
         except Exception as exc:
             warning = str(exc)
 
-    tags = merge_hashtags(llm_tags, genre, always, genres)
+    tags = merge_hashtags(llm_tags, genre, config)
 
     sidecar.write_text(build_sidecar_text(description, tags, caption), encoding="utf-8")
     return sidecar, genre, warning
@@ -810,7 +846,7 @@ def main() -> int:
         print("Supported:", ", ".join(sorted(SUPPORTED_EXTENSIONS)))
         return 0
 
-    always, genres = load_tag_sets()
+    config = load_config()
 
     ok = 0
     failed = 0
@@ -825,9 +861,7 @@ def main() -> int:
             metadata = read_metadata(exiftool, source)
             caption = build_caption(metadata)
             orientation = create_passepartout(source, destination, caption)
-            sidecar, genre, warning = write_sidecar(
-                source, destination, caption, always, genres
-            )
+            sidecar, genre, warning = write_sidecar(source, destination, caption, config)
             moved_to = move_original(source, originals_dir)
 
             print(f"  Layout: {orientation}")

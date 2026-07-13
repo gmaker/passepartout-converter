@@ -1,0 +1,57 @@
+{
+  "_comment": "Everything the LLM step reads. 'description_language' is the language of the sentence above the hashtags - name it in English, e.g. Russian, English, German. 'prompt' is a list of lines and understands {language}, {min}, {max} and {genres}. Under 'hashtags', 'always' goes on every photo and the model picks one key of 'genres' for the shot; write tags without the '#'. 'other' is deliberately empty - it is the escape hatch when nothing fits.",
+
+  "description_language": "Russian",
+
+  "prompt": [
+    "You are writing an Instagram caption for a photographer's shot.",
+    "Look at the photo and answer with JSON only.",
+    "- description: one short evocative sentence in {language} about what is happening in the frame and its mood. No hashtags, no quotes, no camera talk. Maximum 90 characters.",
+    "- hashtags: {min} to {max} English hashtags, lowercase, no '#' sign, no spaces inside a tag. Skip the obvious genre words - describe the mood, the light, the subject and the season instead.",
+    "- genre: the single best match for this photo from this list: {genres}. Use 'other' only when nothing fits."
+  ],
+
+  "hashtags": {
+    "always": [],
+
+    "genres": {
+      "street": [
+        "streetphotography",
+        "streetphoto",
+        "urbanphotography",
+        "citylife",
+        "everydaylife",
+        "streetphotographer"
+      ],
+      "landscape": [
+        "landscapephotography",
+        "naturephotography",
+        "landscapelovers"
+      ],
+      "portrait": [
+        "portraitphotography",
+        "portraitmood",
+        "portraits"
+      ],
+      "architecture": [
+        "architecturephotography",
+        "archilovers",
+        "urbanarchitecture"
+      ],
+      "nature": [
+        "naturephotography",
+        "naturelovers"
+      ],
+      "night": [
+        "nightphotography",
+        "nightshot",
+        "moodygrams"
+      ],
+      "travel": [
+        "travelphotography",
+        "travelgram"
+      ],
+      "other": []
+    }
+  }
+}
