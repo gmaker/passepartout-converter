@@ -6,6 +6,12 @@ Turns raw camera photos into Instagram-ready 1080×1350 images: the photo is pla
 77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 ```
 
+| Source | Result |
+| --- | --- |
+| <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
+
+A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath. Both files are in [`examples/`](examples).
+
 ## Usage
 
 1. Copy the three files from this repo into a working folder.
@@ -14,16 +20,6 @@ Turns raw camera photos into Instagram-ready 1080×1350 images: the photo is pla
 4. Run `run-passepartout.bat` (or `python passepartout_processor.py`).
 
 Results land in `processed/`, originals in `originals/`. You need Python with Pillow and ExifTool on PATH — see [Requirements](#requirements).
-
-## Example
-
-A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath.
-
-| Source | Result |
-| --- | --- |
-| <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
-
-Both files are in [`examples/`](examples).
 
 ## What it does
 
@@ -70,16 +66,6 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 4. Запустите `run-passepartout.bat` (или `python passepartout_processor.py`).
 
 Готовые картинки окажутся в `processed/`, исходники — в `originals/`. Понадобятся Python с Pillow и ExifTool в PATH — см. [Что нужно установить](#что-нужно-установить).
-
-## Пример
-
-На входе кадр с айфона 3:4, на выходе паспарту 1080×1350. Ничего не обрезается: фотография масштабируется так, чтобы целиком поместиться в поля, а снизу подписываются параметры съёмки.
-
-| Исходник | Результат |
-| --- | --- |
-| <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
-
-Оба файла лежат в папке [`examples/`](examples).
 
 ## Как это работает
 
