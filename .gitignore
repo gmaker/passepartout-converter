@@ -1,17 +1,23 @@
 # Игнорируем всё...
 *
 
-# ...кроме гитигнора, README и скриптов/батников в корне
+# ...кроме гитигнора, README, конфигов в корне и скриптов в src/
 !.gitignore
 !README.md
-!/*.py
-!/*.bat
-!/*.yml
-!/*.json
+!/docker-compose.yml
+!/tags.json
+
+!/src/
+!/src/*.py
+!/src/*.bat
 
 # Примеры для README
 !/examples/
 !/examples/*.jpg
+
+# Пустая папка для входящих фотографий: сами фото не коммитим
+!/input/
+!/input/.gitkeep
 
 # Служебное
 *.log

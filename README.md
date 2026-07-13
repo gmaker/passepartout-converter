@@ -22,27 +22,37 @@ A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is crop
 
 ## Usage
 
-1. Copy the scripts, the batch files, `docker-compose.yml` and `tags.json` from this repo into a working folder.
-2. Drop your photos into that same folder.
-3. Double-click **`run-all.bat`**.
+1. Clone the repo.
+2. Put your photos into **`input/`**.
+3. Double-click **`src\run-all.bat`**.
 
-That is the whole pipeline: it starts the local LLM (the first run downloads the model, about 6 GB), converts any `.heic`/`.heif` it finds, and builds the passe-partouts. For each photo you get `processed/<name>_passepartout.jpg` and `processed/<name>_passepartout.txt`; the original moves to `originals/`. You need Python with Pillow and ExifTool on PATH — see [Requirements](#requirements).
+That is the whole pipeline: it starts the local LLM (the first run downloads the model, about 6 GB), converts any `.heic`/`.heif` it finds, and builds the passe-partouts. You need Python with Pillow and ExifTool on PATH — see [Requirements](#requirements).
+
+```
+input/       photos waiting to be processed — this is where you drop them
+processed/   <name>_passepartout.jpg + <name>_passepartout.txt
+originals/   the source photo, moved here once it has been exported
+src/         the scripts
+tags.json    mandatory hashtags
+```
+
+`input/` ends up empty after a run: every photo either lands in `processed/` and moves to `originals/`, or stays put with the reason logged to `process-errors.log`.
 
 No Docker, or Docker not running? `run-all.bat` says so and carries on without it — you still get the passe-partout, and the sidecar holds the metadata line without a description and hashtags. To turn the LLM off for good, set `SIDECAR_ENABLED = False` in the script.
 
-The individual steps are also available when you need just one of them:
+The individual steps live in `src/` too, for when you need just one of them:
 
 | | |
 | --- | --- |
 | `start-llm.bat` | starts Ollama and downloads the model |
-| `heic2jpeg-with-metadata.bat` | converts `.heic`/`.heif` to JPEG, keeping the metadata |
+| `heic2jpeg-with-metadata.bat` | converts `.heic`/`.heif` in `input/` to JPEG, keeping the metadata |
 | `run-passepartout.bat` | builds the passe-partouts and the sidecars |
 
-Stop the container with `docker compose down` when you are done.
+All of them can be run from anywhere — they resolve the project folders relative to themselves. Stop the container with `docker compose down` when you are done.
 
 ## What it does
 
-`passepartout_processor.py` scans the folder it lives in for supported images and, for each one:
+`src/passepartout_processor.py` scans `input/` for supported images and, for each one:
 
 1. Reads camera metadata with ExifTool.
 2. Applies EXIF orientation, then converts any embedded ICC profile (Adobe RGB, Display P3, …) to sRGB.
@@ -55,7 +65,7 @@ Stop the container with `docker compose down` when you are done.
 
 Supported input: `.jpg`, `.jpeg`, `.png`, `.webp`, `.tif`, `.tiff`, `.bmp`. Failures are logged to `process-errors.log` and never abort the batch.
 
-`heic2jpeg-with-metadata.bat` is a pre-step for iPhone photos: it converts every `.heic`/`.heif` in the folder to JPEG with FFmpeg, copies EXIF/XMP/IPTC/ICC across with ExifTool, and moves the originals into `originals/`.
+`heic2jpeg-with-metadata.bat` is a pre-step for iPhone photos: it converts every `.heic`/`.heif` in `input/` to JPEG with FFmpeg, copies EXIF/XMP/IPTC/ICC across with ExifTool, and moves the `.heic` originals into `originals/`. The JPEG it produces stays in `input/` and is picked up by the next step.
 
 ## The local LLM
 
@@ -66,12 +76,12 @@ The default model is `qwen2.5vl:7b` — about 6 GB, comfortable on a 12 GB card.
 ```
 set PASSEPARTOUT_MODEL=qwen2.5vl:3b
 docker compose up -d
-run-passepartout.bat
+src\run-all.bat
 ```
 
 `OLLAMA_URL` (default `http://localhost:11434`) points the script at a different host. No GPU? Delete the `deploy:` block from `docker-compose.yml` and Ollama falls back to CPU — slower, but it works.
 
-The model is asked for a Russian one-line description, a handful of English hashtags and the genre of the shot. The prompt, the hashtag counts and the line width live in the *Caption sidecar* block at the top of `passepartout_processor.py`; the answer is constrained by a JSON schema, so a chatty model cannot break the format. If the LLM is unreachable the photo is still exported — the sidecar just holds the metadata line, and the reason is printed and logged.
+The model is asked for a Russian one-line description, a handful of English hashtags and the genre of the shot. The prompt, the hashtag counts and the line width live in the *Caption sidecar* block at the top of `src/passepartout_processor.py`; the answer is constrained by a JSON schema, so a chatty model cannot break the format. If the LLM is unreachable the photo is still exported — the sidecar just holds the metadata line, and the reason is printed and logged.
 
 ## Mandatory hashtags
 
@@ -102,7 +112,7 @@ Write tags without the `#`. Deleting `tags.json` is fine — you then get only w
 
 ## Tuning
 
-All settings live in the block at the top of `passepartout_processor.py`: canvas size, per-orientation margins and vertical offsets, background and text color, font size, JPEG quality, sharpening, color management. The caption font falls back through Times New Roman → Arial → Calibri → DejaVu.
+All settings live in the block at the top of `src/passepartout_processor.py`: canvas size, per-orientation margins and vertical offsets, background and text color, font size, JPEG quality, sharpening, color management. The caption font falls back through Times New Roman → Arial → Calibri → DejaVu.
 
 ---
 
@@ -124,27 +134,37 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 
 ## Как запустить
 
-1. Скопируйте скрипты, батники, `docker-compose.yml` и `tags.json` в рабочую папку.
-2. Положите туда же фотографии.
-3. Запустите **`run-all.bat`**.
+1. Склонируйте репозиторий.
+2. Положите фотографии в **`input/`**.
+3. Запустите **`src\run-all.bat`**.
 
-Это и есть весь процесс: батник поднимет локальную модель (при первом запуске скачается около 6 ГБ), сконвертирует `.heic`/`.heif`, если они найдутся, и соберёт паспарту. На каждое фото получится `processed/<имя>_passepartout.jpg` и `processed/<имя>_passepartout.txt`, а оригинал уедет в `originals/`. Понадобятся Python с Pillow и ExifTool в PATH — см. [Что нужно установить](#что-нужно-установить).
+Это и есть весь процесс: батник поднимет локальную модель (при первом запуске скачается около 6 ГБ), сконвертирует `.heic`/`.heif`, если они найдутся, и соберёт паспарту. Понадобятся Python с Pillow и ExifTool в PATH — см. [Что нужно установить](#что-нужно-установить).
+
+```
+input/       фотографии, ждущие обработки — сюда их и кладёте
+processed/   <имя>_passepartout.jpg + <имя>_passepartout.txt
+originals/   исходник, уехавший сюда после успешного экспорта
+src/         скрипты
+tags.json    обязательные хештеги
+```
+
+После прогона `input/` остаётся пустой: каждое фото либо оказывается в `processed/` и уезжает в `originals/`, либо остаётся на месте, а причина пишется в `process-errors.log`.
 
 Нет докера или он не запущен? `run-all.bat` честно об этом скажет и продолжит без него: паспарту всё равно соберётся, а в `.txt` будет одна строка с метаданными, без описания и хештегов. Чтобы отключить модель насовсем, поставьте `SIDECAR_ENABLED = False` в скрипте.
 
-Отдельные шаги остались на случай, когда нужен только один из них:
+Отдельные шаги тоже лежат в `src/` — на случай, когда нужен только один из них:
 
 | | |
 | --- | --- |
 | `start-llm.bat` | поднимает Ollama и скачивает модель |
-| `heic2jpeg-with-metadata.bat` | конвертирует `.heic`/`.heif` в JPEG, сохраняя метаданные |
+| `heic2jpeg-with-metadata.bat` | конвертирует `.heic`/`.heif` из `input/` в JPEG, сохраняя метаданные |
 | `run-passepartout.bat` | собирает паспарту и `.txt` |
 
-Когда закончите — `docker compose down` погасит контейнер.
+Запускать их можно откуда угодно — папки проекта они находят относительно себя. Когда закончите — `docker compose down` погасит контейнер.
 
 ## Как это работает
 
-`passepartout_processor.py` обрабатывает все подходящие изображения из той папки, где лежит сам скрипт. Для каждого файла:
+`src/passepartout_processor.py` обрабатывает все подходящие изображения из `input/`. Для каждого файла:
 
 1. Читает метаданные камеры через ExifTool.
 2. Применяет EXIF-ориентацию и переводит встроенный ICC-профиль (Adobe RGB, Display P3 и т.д.) в sRGB.
@@ -157,7 +177,7 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 
 Поддерживаются `.jpg`, `.jpeg`, `.png`, `.webp`, `.tif`, `.tiff`, `.bmp`. Ошибки по отдельным файлам пишутся в `process-errors.log` и не останавливают пакетную обработку.
 
-`heic2jpeg-with-metadata.bat` — подготовительный шаг для фотографий с айфона: конвертирует все `.heic`/`.heif` из папки в JPEG через FFmpeg, переносит EXIF/XMP/IPTC/ICC с помощью ExifTool и убирает оригиналы в `originals/`.
+`heic2jpeg-with-metadata.bat` — подготовительный шаг для фотографий с айфона: конвертирует все `.heic`/`.heif` из `input/` в JPEG через FFmpeg, переносит EXIF/XMP/IPTC/ICC с помощью ExifTool и убирает исходные `.heic` в `originals/`. Готовый JPEG остаётся в `input/` — его подхватит следующий шаг.
 
 ## Про локальную модель
 
@@ -168,12 +188,12 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 ```
 set PASSEPARTOUT_MODEL=qwen2.5vl:3b
 docker compose up -d
-run-passepartout.bat
+src\run-all.bat
 ```
 
 Переменная `OLLAMA_URL` (по умолчанию `http://localhost:11434`) нужна, если Ollama крутится на другом хосте. Нет видеокарты — уберите блок `deploy:` из `docker-compose.yml`, и модель поедет на процессоре: медленнее, но работает.
 
-У модели просят одно предложение по-русски, несколько английских хештегов и жанр кадра. Промпт, количество тегов и ширина строки лежат в блоке *Caption sidecar* в начале `passepartout_processor.py`. Ответ ограничен JSON-схемой, так что болтливая модель формат не сломает. Если Ollama недоступна, фотография всё равно обработается — в `.txt` останется только строка с метаданными, а причина будет напечатана и записана в лог.
+У модели просят одно предложение по-русски, несколько английских хештегов и жанр кадра. Промпт, количество тегов и ширина строки лежат в блоке *Caption sidecar* в начале `src/passepartout_processor.py`. Ответ ограничен JSON-схемой, так что болтливая модель формат не сломает. Если Ollama недоступна, фотография всё равно обработается — в `.txt` останется только строка с метаданными, а причина будет напечатана и записана в лог.
 
 ## Обязательные хештеги
 
@@ -204,4 +224,4 @@ run-passepartout.bat
 
 ## Настройка
 
-Все параметры собраны в блоке настроек в начале `passepartout_processor.py`: размер холста, поля и вертикальные сдвиги для каждой ориентации, цвет фона и текста, размер шрифта, качество JPEG, шарпинг, управление цветом. Шрифт подписи подбирается по цепочке Times New Roman → Arial → Calibri → DejaVu.
+Все параметры собраны в блоке настроек в начале `src/passepartout_processor.py`: размер холста, поля и вертикальные сдвиги для каждой ориентации, цвет фона и текста, размер шрифта, качество JPEG, шарпинг, управление цветом. Шрифт подписи подбирается по цепочке Times New Roman → Arial → Calibri → DejaVu.

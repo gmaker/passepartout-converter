@@ -1,11 +1,13 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
 
 rem The whole pipeline: start the LLM, convert HEIC, build the passe-partouts.
-rem Drop your photos next to this file and double-click it.
+rem Put your photos into the input folder in the project root, then run this.
+cd /d "%~dp0.."
 
 if /i "%~1"=="--no-pause" set "NOPAUSE=1"
+
+if not exist "%CD%\input" mkdir "%CD%\input"
 
 set "SKIP_LLM="
 
@@ -45,7 +47,7 @@ echo.
 echo [2/3] Converting HEIC files, if there are any.
 
 set "HAS_HEIC="
-for %%F in (*.heic *.HEIC *.heif *.HEIF) do set "HAS_HEIC=1"
+for %%F in (input\*.heic input\*.heif) do set "HAS_HEIC=1"
 
 if defined HAS_HEIC (
     call "%~dp0heic2jpeg-with-metadata.bat" --no-pause

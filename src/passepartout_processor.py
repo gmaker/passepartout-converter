@@ -3,7 +3,7 @@
 Instagram passe-partout processor.
 
 Workflow:
-1. Reads supported images from the folder where this script is located.
+1. Reads supported images from ../input
 2. Reads camera metadata with ExifTool.
 3. Creates a 1080x1350 white canvas.
 4. Fits the image without cropping.
@@ -137,6 +137,8 @@ HASHTAGS_PER_LINE = 3
 
 SIDECAR_EXTENSION = ".txt"
 
+# All of these live in the project root, one level above this script.
+INPUT_DIR_NAME = "input"
 PROCESSED_DIR_NAME = "processed"
 ORIGINALS_DIR_NAME = "originals"
 ERROR_LOG_NAME = "process-errors.log"
@@ -144,8 +146,9 @@ ERROR_LOG_NAME = "process-errors.log"
 # =========================
 
 
-def script_dir() -> Path:
-    return Path(__file__).resolve().parent
+def project_root() -> Path:
+    """The folder above src/ — it holds input/, processed/, originals/ and tags.json."""
+    return Path(__file__).resolve().parent.parent
 
 
 def find_exiftool() -> str:
@@ -580,7 +583,7 @@ def normalize_tags(raw_tags: Any) -> list[str]:
 
 def load_tag_sets() -> tuple[list[str], dict[str, list[str]]]:
     """Reads tags.json. A missing or broken file simply means no mandatory tags."""
-    path = script_dir() / TAGS_FILE_NAME
+    path = project_root() / TAGS_FILE_NAME
 
     if not path.exists():
         return [], {}
@@ -781,11 +784,13 @@ def log_error(log_path: Path, source: Path, exc: Exception) -> None:
 
 
 def main() -> int:
-    root = script_dir()
+    root = project_root()
+    input_dir = root / INPUT_DIR_NAME
     processed_dir = root / PROCESSED_DIR_NAME
     originals_dir = root / ORIGINALS_DIR_NAME
     error_log = root / ERROR_LOG_NAME
 
+    input_dir.mkdir(exist_ok=True)
     processed_dir.mkdir(exist_ok=True)
     originals_dir.mkdir(exist_ok=True)
 
@@ -796,12 +801,12 @@ def main() -> int:
         return 1
 
     files = sorted(
-        path for path in root.iterdir()
+        path for path in input_dir.iterdir()
         if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
     )
 
     if not files:
-        print("No supported images found in the script folder.")
+        print(f"No supported images found in {INPUT_DIR_NAME}/")
         print("Supported:", ", ".join(sorted(SUPPORTED_EXTENSIONS)))
         return 0
 

@@ -1,14 +1,20 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+
+rem This script lives in src\ — everything it touches sits in the project root.
+cd /d "%~dp0.."
 
 rem run-all.bat calls this with --no-pause so the window is not held twice.
 if /i "%~1"=="--no-pause" set "NOPAUSE=1"
 
-set "ORIGINALS=%~dp0originals"
-set "LOG=%~dp0heic2jpeg-errors.log"
+set "INPUT=%CD%\input"
+set "ORIGINALS=%CD%\originals"
+set "LOG=%CD%\heic2jpeg-errors.log"
 
+if not exist "%INPUT%" mkdir "%INPUT%"
 if not exist "%ORIGINALS%" mkdir "%ORIGINALS%"
+
+cd /d "%INPUT%"
 
 where ffmpeg >nul 2>nul
 if errorlevel 1 (

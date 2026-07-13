@@ -1,6 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+
+rem docker-compose.yml sits in the project root, one level above src\.
+cd /d "%~dp0.."
 
 where docker >nul 2>nul
 if errorlevel 1 (

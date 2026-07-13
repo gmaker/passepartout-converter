@@ -1,6 +1,9 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+
+rem The script reads ..\input and writes ..\processed regardless of where it is
+rem called from, but keep the working directory predictable anyway.
+cd /d "%~dp0.."
 
 rem run-all.bat calls this with --no-pause so the window is not held twice.
 if /i "%~1"=="--no-pause" set "NOPAUSE=1"
