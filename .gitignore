@@ -7,6 +7,10 @@
 !/*.py
 !/*.bat
 
+# Примеры для README
+!/examples/
+!/examples/*.jpg
+
 # Служебное
 *.log
 __pycache__/

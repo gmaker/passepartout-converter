@@ -3,8 +3,18 @@
 Turns raw camera photos into Instagram-ready 1080×1350 images: the photo is placed, uncropped, on a white passe-partout canvas, with a centered caption underneath showing the shooting parameters read from EXIF (focal length, aperture, shutter speed, ISO).
 
 ```
-30mm   ·   f/1.8   ·   1/125s   ·   ISO 100
+77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 ```
+
+## Example
+
+A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath.
+
+| Source | Result |
+| --- | --- |
+| <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
+
+Both files are in [`examples/`](examples).
 
 ## What it does
 
@@ -49,8 +59,18 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 Утилита готовит фотографии к публикации в Instagram: снимок без обрезки кладётся на белое паспарту 1080×1350, а под ним по центру подписываются параметры съёмки, вытащенные из EXIF — фокусное расстояние, диафрагма, выдержка, ISO.
 
 ```
-30mm   ·   f/1.8   ·   1/125s   ·   ISO 100
+77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 ```
+
+## Пример
+
+На входе кадр с айфона 3:4, на выходе паспарту 1080×1350. Ничего не обрезается: фотография масштабируется так, чтобы целиком поместиться в поля, а снизу подписываются параметры съёмки.
+
+| Исходник | Результат |
+| --- | --- |
+| <img src="examples/source.jpg" width="380"> | <img src="examples/result.jpg" width="380"> |
+
+Оба файла лежат в папке [`examples/`](examples).
 
 ## Как это работает
 
