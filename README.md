@@ -6,6 +6,15 @@ Turns raw camera photos into Instagram-ready 1080×1350 images: the photo is pla
 77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 ```
 
+## Usage
+
+1. Copy the three files from this repo into a working folder.
+2. Drop your photos into that same folder.
+3. For iPhone `.heic` files, run `heic2jpeg-with-metadata.bat` first.
+4. Run `run-passepartout.bat` (or `python passepartout_processor.py`).
+
+Results land in `processed/`, originals in `originals/`. You need Python with Pillow and ExifTool on PATH — see [Requirements](#requirements).
+
 ## Example
 
 A 3:4 iPhone shot goes in, a 1080×1350 passe-partout comes out. Nothing is cropped — the photo is scaled to fit inside the margins, and the shooting parameters are printed underneath.
@@ -39,15 +48,6 @@ Supported input: `.jpg`, `.jpeg`, `.png`, `.webp`, `.tif`, `.tiff`, `.bmp`. Fail
 - **FFmpeg** on PATH — only for the HEIC batch file.
 - **mozjpeg** (`cjpeg`) on PATH — optional; slightly better compression when present.
 
-## Usage
-
-1. Copy the three files from this repo into a working folder.
-2. Drop your photos into that same folder.
-3. For iPhone `.heic` files, run `heic2jpeg-with-metadata.bat` first.
-4. Run `run-passepartout.bat` (or `python passepartout_processor.py`).
-
-Results land in `processed/`, originals in `originals/`.
-
 ## Tuning
 
 All settings live in the block at the top of `passepartout_processor.py`: canvas size, per-orientation margins and vertical offsets, background and text color, font size, JPEG quality, sharpening, color management. The caption font falls back through Times New Roman → Arial → Calibri → DejaVu.
@@ -61,6 +61,15 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 ```
 77mm   ·   f/2.8   ·   1/111s   ·   ISO 32
 ```
+
+## Как запустить
+
+1. Скопируйте три файла из репозитория в рабочую папку.
+2. Положите туда же фотографии.
+3. Если снимки в `.heic` с айфона — сначала запустите `heic2jpeg-with-metadata.bat`.
+4. Запустите `run-passepartout.bat` (или `python passepartout_processor.py`).
+
+Готовые картинки окажутся в `processed/`, исходники — в `originals/`. Понадобятся Python с Pillow и ExifTool в PATH — см. [Что нужно установить](#что-нужно-установить).
 
 ## Пример
 
@@ -94,15 +103,6 @@ All settings live in the block at the top of `passepartout_processor.py`: canvas
 - **ExifTool** в PATH — обязательно.
 - **FFmpeg** в PATH — только для батника с HEIC.
 - **mozjpeg** (`cjpeg`) в PATH — по желанию, даёт чуть лучшее сжатие.
-
-## Как запустить
-
-1. Скопируйте три файла из репозитория в рабочую папку.
-2. Положите туда же фотографии.
-3. Если снимки в `.heic` с айфона — сначала запустите `heic2jpeg-with-metadata.bat`.
-4. Запустите `run-passepartout.bat` (или `python passepartout_processor.py`).
-
-Готовые картинки окажутся в `processed/`, исходники — в `originals/`.
 
 ## Настройка
 
