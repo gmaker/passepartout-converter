@@ -1,0 +1,39 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: passepartout-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      # Keep the model resident between photos so a batch does not reload it every time.
+      - OLLAMA_KEEP_ALIVE=30m
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # One-shot: downloads the vision model into the shared volume, then exits.
+  model-init:
+    image: ollama/ollama:latest
+    container_name: passepartout-model-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${PASSEPARTOUT_MODEL:-qwen2.5vl:7b}"]
+    restart: "no"
+
+volumes:
+  ollama-models:

@@ -2,6 +2,9 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
+rem run-all.bat calls this with --no-pause so the window is not held twice.
+if /i "%~1"=="--no-pause" set "NOPAUSE=1"
+
 set "ORIGINALS=%~dp0originals"
 set "LOG=%~dp0heic2jpeg-errors.log"
 
@@ -10,14 +13,14 @@ if not exist "%ORIGINALS%" mkdir "%ORIGINALS%"
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
     echo ERROR: ffmpeg was not found in PATH.
-    pause
+    if not defined NOPAUSE pause
     exit /b 1
 )
 
 where exiftool >nul 2>nul
 if errorlevel 1 (
     echo ERROR: exiftool was not found in PATH.
-    pause
+    if not defined NOPAUSE pause
     exit /b 1
 )
 
@@ -31,7 +34,7 @@ for %%F in (*.heic *.HEIC *.heif *.HEIF) do (
 echo.
 echo Done. Successful: %OK%  Failed: %FAIL%
 if not "%FAIL%"=="0" echo See: "%LOG%"
-pause
+if not defined NOPAUSE pause
 exit /b
 
 :PROCESS

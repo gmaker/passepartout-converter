@@ -6,6 +6,8 @@
 !README.md
 !/*.py
 !/*.bat
+!/*.yml
+!/*.json
 
 # Примеры для README
 !/examples/

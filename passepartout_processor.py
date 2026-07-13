@@ -8,8 +8,10 @@ Workflow:
 3. Creates a 1080x1350 white canvas.
 4. Fits the image without cropping.
 5. Adds a centered metadata caption below the image.
-6. Saves the result to ./processed
-7. Moves the original to ./originals only after a successful export.
+6. Asks a local vision LLM (Ollama, see docker-compose.yml) for a description
+   and hashtags, and writes them next to the export as a .txt sidecar.
+7. Saves the result to ./processed
+8. Moves the original to ./originals only after a successful export.
 
 HEIC/HEIF:
 Use heic2jpeg.bat first, unless Pillow on your system has HEIC support.
@@ -17,10 +19,15 @@ Use heic2jpeg.bat first, unless Pillow on your system has HEIC support.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
+import os
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +100,42 @@ STRIP_OUTPUT_METADATA = True  # removes EXIF/GPS; sRGB ICC is still preserved
 SUPPORTED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"
 }
+
+# =========================
+# Caption sidecar (local LLM)
+# =========================
+
+# Writes <name>_passepartout.txt next to every exported image:
+# description, blank line, camera metadata, blank line, hashtags.
+# Requires a local Ollama with a vision model: docker compose up -d
+# If the LLM is unreachable, the sidecar still gets the metadata line.
+SIDECAR_ENABLED = True
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("PASSEPARTOUT_MODEL", "qwen2.5vl:7b")
+
+LLM_TIMEOUT_SECONDS = 180
+LLM_TEMPERATURE = 0.6
+
+# The photo is downscaled before it is sent to the model.
+LLM_PREVIEW_MAX_SIDE = 1024
+LLM_PREVIEW_QUALITY = 85
+
+# Mandatory hashtags per genre: see tags.json next to this script.
+# The model picks a genre from its "genres" keys; that set plus "always"
+# is merged with the tags the model came up with itself.
+TAGS_FILE_NAME = "tags.json"
+
+# How many tags to ask the model for, on top of the mandatory ones.
+HASHTAGS_MIN = 5
+HASHTAGS_MAX = 8
+
+# Hard ceiling for the whole list. Mandatory tags are never dropped —
+# the model's own tags are cut first if the list gets too long.
+HASHTAGS_TOTAL_MAX = 15
+HASHTAGS_PER_LINE = 3
+
+SIDECAR_EXTENSION = ".txt"
 
 PROCESSED_DIR_NAME = "processed"
 ORIGINALS_DIR_NAME = "originals"
@@ -500,6 +543,232 @@ def create_passepartout(
         return orientation
 
 
+def llm_preview(source: Path) -> bytes:
+    """A downscaled sRGB JPEG of the photo — what the model actually looks at."""
+    with Image.open(source) as raw:
+        image = ImageOps.exif_transpose(raw)
+        image = convert_to_rgb(image)
+        image.thumbnail(
+            (LLM_PREVIEW_MAX_SIDE, LLM_PREVIEW_MAX_SIDE),
+            Image.Resampling.LANCZOS,
+        )
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=LLM_PREVIEW_QUALITY)
+        return buffer.getvalue()
+
+
+def normalize_tags(raw_tags: Any) -> list[str]:
+    """'#Street Photo' -> 'streetphoto'. Drops junk, keeps order, removes duplicates."""
+    if not isinstance(raw_tags, list):
+        return []
+
+    tags: list[str] = []
+
+    for item in raw_tags:
+        if not isinstance(item, str):
+            continue
+
+        tag = item.strip().lstrip("#").replace(" ", "").lower()
+        tag = "".join(char for char in tag if char.isalnum() or char == "_")
+
+        if tag and tag not in tags:
+            tags.append(tag)
+
+    return tags
+
+
+def load_tag_sets() -> tuple[list[str], dict[str, list[str]]]:
+    """Reads tags.json. A missing or broken file simply means no mandatory tags."""
+    path = script_dir() / TAGS_FILE_NAME
+
+    if not path.exists():
+        return [], {}
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"  WARNING: {TAGS_FILE_NAME} could not be read - {exc}")
+        return [], {}
+
+    always = normalize_tags(data.get("always"))
+
+    raw_genres = data.get("genres")
+    genres: dict[str, list[str]] = {}
+
+    if isinstance(raw_genres, dict):
+        for name, tags in raw_genres.items():
+            genres[str(name).strip().lower()] = normalize_tags(tags)
+
+    return always, genres
+
+
+def build_prompt(genres: dict[str, list[str]]) -> str:
+    lines = [
+        "You are writing an Instagram caption for a photographer's shot.",
+        "Look at the photo and answer with JSON only.",
+        "- description: one short evocative sentence in Russian about what is happening "
+        "in the frame and its mood. No hashtags, no quotes, no camera talk. "
+        "Maximum 90 characters.",
+        f"- hashtags: {HASHTAGS_MIN} to {HASHTAGS_MAX} English hashtags, lowercase, no '#' sign, "
+        "no spaces inside a tag. Skip the obvious genre words - describe the mood, the light, "
+        "the subject and the season instead.",
+    ]
+
+    if genres:
+        lines.append(
+            "- genre: the single best match for this photo from this list: "
+            + ", ".join(sorted(genres))
+            + ". Use 'other' only when nothing fits."
+        )
+
+    return "\n".join(lines)
+
+
+def build_schema(genres: dict[str, list[str]]) -> dict[str, Any]:
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "description": {"type": "string"},
+            "hashtags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["description", "hashtags"],
+    }
+
+    if genres:
+        schema["properties"]["genre"] = {"type": "string", "enum": sorted(genres)}
+        schema["required"].append("genre")
+
+    return schema
+
+
+def ask_llm(preview: bytes, genres: dict[str, list[str]]) -> dict[str, Any]:
+    payload = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "format": build_schema(genres),
+        "options": {"temperature": LLM_TEMPERATURE},
+        "messages": [
+            {
+                "role": "user",
+                "content": build_prompt(genres),
+                "images": [base64.b64encode(preview).decode("ascii")],
+            }
+        ],
+    }
+
+    request = urllib.request.Request(
+        f"{OLLAMA_URL.rstrip('/')}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=LLM_TIMEOUT_SECONDS) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Ollama returned {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Ollama is not reachable at {OLLAMA_URL} ({exc.reason}). "
+            "Start it with: docker compose up -d"
+        ) from exc
+
+    content = body.get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError("Ollama returned an empty answer")
+
+    return json.loads(content)
+
+
+def merge_hashtags(
+    llm_tags: list[str],
+    genre: str,
+    always: list[str],
+    genres: dict[str, list[str]],
+) -> list[str]:
+    """Mandatory tags come first and are never dropped; the model's own tags fill the rest."""
+    mandatory = genres.get(genre, []) + always
+
+    merged = normalize_tags(mandatory)
+    room_left = max(0, HASHTAGS_TOTAL_MAX - len(merged))
+
+    for tag in llm_tags[:HASHTAGS_MAX]:
+        if room_left == 0:
+            break
+        if tag not in merged:
+            merged.append(tag)
+            room_left -= 1
+
+    return merged
+
+
+def format_hashtags(tags: list[str]) -> str:
+    lines = [
+        " ".join(f"#{tag}" for tag in tags[start:start + HASHTAGS_PER_LINE])
+        for start in range(0, len(tags), HASHTAGS_PER_LINE)
+    ]
+    return "\n".join(lines)
+
+
+def build_sidecar_text(description: str, tags: list[str], caption: str) -> str:
+    blocks = []
+
+    if description:
+        blocks.append(description)
+
+    if caption.strip():
+        blocks.append(caption.strip())
+
+    if tags:
+        blocks.append(format_hashtags(tags))
+
+    return "\n\n".join(blocks) + "\n"
+
+
+def write_sidecar(
+    source: Path,
+    destination: Path,
+    caption: str,
+    always: list[str],
+    genres: dict[str, list[str]],
+) -> tuple[Path, str, str]:
+    """
+    Writes <name>_passepartout.txt and returns its path, the detected genre and a
+    warning string. The warning is empty on success; when the LLM is unavailable
+    the sidecar still gets the metadata line and the mandatory 'always' tags.
+    """
+    sidecar = destination.with_suffix(SIDECAR_EXTENSION)
+
+    description = ""
+    genre = ""
+    llm_tags: list[str] = []
+    warning = ""
+
+    if SIDECAR_ENABLED:
+        try:
+            answer = ask_llm(llm_preview(source), genres)
+
+            raw_description = answer.get("description", "")
+            if isinstance(raw_description, str):
+                description = raw_description.strip().strip('"')
+
+            raw_genre = answer.get("genre", "")
+            if isinstance(raw_genre, str):
+                genre = raw_genre.strip().lower()
+
+            llm_tags = normalize_tags(answer.get("hashtags"))
+        except Exception as exc:
+            warning = str(exc)
+
+    tags = merge_hashtags(llm_tags, genre, always, genres)
+
+    sidecar.write_text(build_sidecar_text(description, tags, caption), encoding="utf-8")
+    return sidecar, genre, warning
+
+
 def move_original(source: Path, originals_dir: Path) -> Path:
     destination = unique_path(originals_dir / source.name)
     shutil.move(str(source), str(destination))
@@ -536,6 +805,8 @@ def main() -> int:
         print("Supported:", ", ".join(sorted(SUPPORTED_EXTENSIONS)))
         return 0
 
+    always, genres = load_tag_sets()
+
     ok = 0
     failed = 0
 
@@ -549,11 +820,20 @@ def main() -> int:
             metadata = read_metadata(exiftool, source)
             caption = build_caption(metadata)
             orientation = create_passepartout(source, destination, caption)
+            sidecar, genre, warning = write_sidecar(
+                source, destination, caption, always, genres
+            )
             moved_to = move_original(source, originals_dir)
 
             print(f"  Layout: {orientation}")
             print(f"  Saved: {destination.name}")
             print(f"  Caption: {caption.strip() or '(no EXIF data)'}")
+            print(f"  Sidecar: {sidecar.name}{f' (genre: {genre})' if genre else ''}")
+
+            if warning:
+                print(f"  WARNING: no description or hashtags - {warning}")
+                log_error(error_log, source, RuntimeError(warning))
+
             print(f"  Original: {moved_to.name}")
             ok += 1
 

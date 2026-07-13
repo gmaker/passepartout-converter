@@ -1,0 +1,45 @@
+{
+  "_comment": "Hashtags that are always added to the LLM's own suggestions. 'always' goes on every photo; the LLM picks one genre from the keys of 'genres' and that set is added too. Write tags without the '#'. Use 'other' as an escape hatch - it deliberately has no tags of its own.",
+
+  "always": [],
+
+  "genres": {
+    "street": [
+      "streetphotography",
+      "streetphoto",
+      "urbanphotography",
+      "citylife",
+      "everydaylife",
+      "streetphotographer"
+    ],
+    "landscape": [
+      "landscapephotography",
+      "naturephotography",
+      "landscapelovers"
+    ],
+    "portrait": [
+      "portraitphotography",
+      "portraitmood",
+      "portraits"
+    ],
+    "architecture": [
+      "architecturephotography",
+      "archilovers",
+      "urbanarchitecture"
+    ],
+    "nature": [
+      "naturephotography",
+      "naturelovers"
+    ],
+    "night": [
+      "nightphotography",
+      "nightshot",
+      "moodygrams"
+    ],
+    "travel": [
+      "travelphotography",
+      "travelgram"
+    ],
+    "other": []
+  }
+}
