@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-rem This script lives in src\ — everything it touches sits in the project root.
+rem This script lives in bin\ - everything it touches sits in the project root.
 cd /d "%~dp0.."
 
 rem run-all.bat calls this with --no-pause so the window is not held twice.

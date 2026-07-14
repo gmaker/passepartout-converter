@@ -3,13 +3,17 @@
 
 # ...кроме гитигнора, README, конфигов в корне и скриптов в src/
 !.gitignore
+!.gitattributes
 !README.md
 !/docker-compose.yml
 !/tags.json
 
 !/src/
 !/src/*.py
-!/src/*.bat
+
+!/bin/
+!/bin/*.bat
+!/bin/*.sh
 
 # Примеры для README
 !/examples/

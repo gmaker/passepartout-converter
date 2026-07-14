@@ -1,8 +1,7 @@
 @echo off
 setlocal
 
-rem The script reads ..\input and writes ..\processed regardless of where it is
-rem called from, but keep the working directory predictable anyway.
+rem This script lives in bin\ — the project root is one level up.
 cd /d "%~dp0.."
 
 rem run-all.bat calls this with --no-pause so the window is not held twice.
@@ -27,6 +26,6 @@ if errorlevel 1 (
     )
 )
 
-python "%~dp0passepartout_processor.py"
+python "%~dp0..\src\passepartout_processor.py"
 echo.
 if not defined NOPAUSE pause

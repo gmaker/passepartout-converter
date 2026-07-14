@@ -1,0 +1,6 @@
+# Shell scripts must keep LF: a CRLF shebang breaks them on Linux and macOS.
+*.sh text eol=lf
+*.py text eol=lf
+
+# Batch files are only ever run by cmd.exe, which wants CRLF.
+*.bat text eol=crlf

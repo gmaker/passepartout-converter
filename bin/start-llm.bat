@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-rem docker-compose.yml sits in the project root, one level above src\.
+rem docker-compose.yml sits in the project root, one level above bin\.
 cd /d "%~dp0.."
 
 where docker >nul 2>nul
