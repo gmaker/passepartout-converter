@@ -14,7 +14,7 @@ Workflow:
 8. Moves the original to ./originals only after a successful export.
 
 HEIC/HEIF:
-Use heic2jpeg.bat first, unless Pillow on your system has HEIC support.
+Run bin/heic2jpeg-with-metadata first, unless Pillow here has HEIC support.
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ DEFAULT_PROMPT = [
 HASHTAGS_MIN = 5
 HASHTAGS_MAX = 8
 
-# Hard ceiling for the whole list. Mandatory tags are never dropped —
+# Hard ceiling for the whole list. Mandatory tags are never dropped;
 # the model's own tags are cut first if the list gets too long.
 HASHTAGS_TOTAL_MAX = 15
 HASHTAGS_PER_LINE = 3
@@ -163,7 +163,7 @@ ERROR_LOG_NAME = "process-errors.log"
 
 
 def project_root() -> Path:
-    """The folder above src/ — it holds input/, processed/, originals/ and config.json."""
+    """The folder above src/. It holds input/, processed/, originals/ and config.json."""
     return Path(__file__).resolve().parent.parent
 
 
@@ -563,7 +563,7 @@ def create_passepartout(
 
 
 def llm_preview(source: Path) -> bytes:
-    """A downscaled sRGB JPEG of the photo — what the model actually looks at."""
+    """A downscaled sRGB JPEG of the photo: what the model actually looks at."""
     with Image.open(source) as raw:
         image = ImageOps.exif_transpose(raw)
         image = convert_to_rgb(image)

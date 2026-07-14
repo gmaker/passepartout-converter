@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-rem This script lives in bin\ — the project root is one level up.
+rem This script lives in bin\, the project root is one level up.
 cd /d "%~dp0.."
 
 rem run-all.bat calls this with --no-pause so the window is not held twice.
